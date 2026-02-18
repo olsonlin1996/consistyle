@@ -15,7 +15,7 @@ from utils.ptp_utils import view_images
 
 
 def load_pipeline(gpu_id=0):
-    float_type = torch.float32
+    float_type = torch.float16
     sd_id = "stabilityai/stable-diffusion-xl-base-1.0"
     
     device = torch.device(f'cuda:{gpu_id}') if torch.cuda.is_available() else torch.device('cpu')
