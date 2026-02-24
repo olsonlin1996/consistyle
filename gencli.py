@@ -191,6 +191,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument("--cache_cpu_offloading", default=False, type=str2bool, required=False)
+    parser.add_argument("--perform_feature_injection_bg_adain", default=False, type=str2bool, required=False)
     parser.add_argument("--perform_consistory_injection", default=False, type=str2bool, required=False)
 
     parser.add_argument("--attn_v_range", default=[3, 10], type=int, nargs="*", required=False)
