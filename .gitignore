@@ -3,3 +3,4 @@ __pycache__/
 out*
 masks
 attentions
+.DS_Store
