@@ -129,20 +129,29 @@ class FeatureInjector:
                     final_mask_tgt = attn_masks[i] & dist_mask
 
                     if self.use_freq_decouple and output_res == 64:
-                        # FFT Decomposition Path
+                        # FFT Decomposition Path (Only apply to the target mask area)
                         dim = output.shape[-1]
+                        
+                        # Reshape to spatial
                         tgt_spatial = output[i].reshape(64, 64, dim)
                         ref_all = old_output[curr_mapping][min_dists, curr_nn_map]
                         ref_spatial = ref_all.reshape(64, 64, dim)
+                        mask_spatial = final_mask_tgt.reshape(64, 64)
                         
+                        # Frequency Decomposition
                         tgt_low = get_fft_filter(tgt_spatial, self.freq_threshold, mode='lowpass')
                         tgt_high = get_fft_filter(tgt_spatial, self.freq_threshold, mode='highpass')
-                        
                         ref_high = get_fft_filter(ref_spatial, self.freq_threshold, mode='highpass')
+                        
+                        # Style alignment
                         ref_high_styled = adain_style(ref_high, tgt_high)
                         
+                        # Selective Injection: only within the mask
                         combined_spatial = tgt_low + (alpha * ref_high_styled + (1 - alpha) * tgt_high)
-                        output[i] = combined_spatial.reshape(-1, dim)
+                        
+                        # Update only masked pixels in the original output tensor
+                        # To avoid full spatial rewrite, we flatten and use mask
+                        output[i][final_mask_tgt] = combined_spatial.reshape(-1, dim)[final_mask_tgt]
                     else:
                         # Original Spatial Injection Path
                         other_outputs = old_output[curr_mapping][min_dists, curr_nn_map][final_mask_tgt]
