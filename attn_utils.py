@@ -5,6 +5,7 @@
 
 import numpy as np
 import torch
+import torch.fft
 from collections import defaultdict
 from diffusers.utils.import_utils import is_xformers_available
 from typing import Optional, List
@@ -18,8 +19,43 @@ if is_xformers_available():
 else:
     xformers = None
 
+def get_fft_filter(x, threshold, mode='lowpass'):
+    # x shape: (H, W, C)
+    h, w, c = x.shape
+    
+    # FFT (2D on spatial dimensions)
+    x_freq = torch.fft.fftn(x, dim=(0, 1))
+    x_freq = torch.fft.fftshift(x_freq, dim=(0, 1))
+    
+    # Create circular mask
+    Y, X = torch.meshgrid(torch.arange(h), torch.arange(w), indexing='ij')
+    center_y, center_x = h // 2, w // 2
+    dist = torch.sqrt((X - center_x)**2 + (Y - center_y)**2).to(x.device)
+    
+    if mode == 'lowpass':
+        mask = (dist <= threshold).unsqueeze(-1)
+    else:
+        mask = (dist > threshold).unsqueeze(-1)
+        
+    # Apply mask
+    x_freq = x_freq * mask
+    
+    # Inverse FFT
+    x_freq = torch.fft.ifftshift(x_freq, dim=(0, 1))
+    filtered_x = torch.fft.ifftn(x_freq, dim=(0, 1)).real
+    return filtered_x
+
 class FeatureInjector:
-    def __init__(self, nn_map, nn_distances, attn_masks, inject_range_alpha=[(10,20,0.8)], swap_strategy='min', dist_thr='dynamic', inject_unet_parts=['up'], background_adain=None, background_self_alignment_range=(15, 20)):
+    def __init__(self, nn_map, nn_distances, attn_masks, 
+                 inject_range_alpha=[(10,20,0.8)], 
+                 swap_strategy='min', 
+                 dist_thr='dynamic', 
+                 inject_unet_parts=['up'], 
+                 background_adain=None, 
+                 background_self_alignment_range=(15, 20),
+                 freq_threshold=8.0,
+                 use_freq_decouple=True):
+        
         self.nn_map = nn_map
         self.nn_distances = nn_distances
         self.attn_masks = attn_masks
@@ -31,6 +67,8 @@ class FeatureInjector:
         self.inject_res = [64]
         self.background_adain = background_adain
         self.background_self_alignment_range = background_self_alignment_range
+        self.freq_threshold = freq_threshold
+        self.use_freq_decouple = use_freq_decouple
         
     def get_nn_map(self, i, output_res, extended_mapping):
         if output_res not in self.inject_res:
@@ -75,8 +113,6 @@ class FeatureInjector:
         if alpha:
             old_output = output#.clone()
             for i in range(bsz):
-                other_outputs = []
-
                 if self.swap_strategy == 'min':
                     curr_mapping = extended_mapping[i]
 
@@ -92,27 +128,41 @@ class FeatureInjector:
                     dist_mask = curr_nn_distances < dist_thr
                     final_mask_tgt = attn_masks[i] & dist_mask
 
-                    other_outputs = old_output[curr_mapping][min_dists, curr_nn_map][final_mask_tgt]
-                    
-                    if self.background_adain is None:
-                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]    
-                    elif self.background_adain == 'pre-subject':
-                        other_outputs = adain_style(other_outputs, old_output[i][final_mask_tgt])
-                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
-                    elif self.background_adain == 'pre-subject-background':
-                        other_outputs = adain_style(other_outputs, old_output[i][~final_mask_tgt])
-                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
-                    elif self.background_adain == 'post':
-                        style_reference = old_output[i][~final_mask_tgt]
-                        result = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
-                        output[i][final_mask_tgt] = adain_style(result, style_reference)
+                    if self.use_freq_decouple and output_res == 64:
+                        # FFT Decomposition Path
+                        dim = output.shape[-1]
+                        tgt_spatial = output[i].reshape(64, 64, dim)
+                        ref_all = old_output[curr_mapping][min_dists, curr_nn_map]
+                        ref_spatial = ref_all.reshape(64, 64, dim)
+                        
+                        tgt_low = get_fft_filter(tgt_spatial, self.freq_threshold, mode='lowpass')
+                        tgt_high = get_fft_filter(tgt_spatial, self.freq_threshold, mode='highpass')
+                        
+                        ref_high = get_fft_filter(ref_spatial, self.freq_threshold, mode='highpass')
+                        ref_high_styled = adain_style(ref_high, tgt_high)
+                        
+                        combined_spatial = tgt_low + (alpha * ref_high_styled + (1 - alpha) * tgt_high)
+                        output[i] = combined_spatial.reshape(-1, dim)
                     else:
-                        raise ValueError(f"Unknown background_adain mode: {self.background_adain}")
+                        # Original Spatial Injection Path
+                        other_outputs = old_output[curr_mapping][min_dists, curr_nn_map][final_mask_tgt]
+                        
+                        if self.background_adain is None:
+                            output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]    
+                        elif self.background_adain == 'pre-subject':
+                            other_outputs = adain_style(other_outputs, old_output[i][final_mask_tgt])
+                            output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                        elif self.background_adain == 'pre-subject-background':
+                            other_outputs = adain_style(other_outputs, old_output[i][~final_mask_tgt])
+                            output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                        elif self.background_adain == 'post':
+                            style_reference = old_output[i][~final_mask_tgt]
+                            result = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                            output[i][final_mask_tgt] = adain_style(result, style_reference)
 
             if anchors_cache and anchors_cache.is_cache_mode():
                 if place_in_unet not in anchors_cache.h_out_cache:
                     anchors_cache.h_out_cache[place_in_unet] = {}
-
                 anchors_cache.h_out_cache[place_in_unet][curr_iter] = output
 
         return output
@@ -148,13 +198,9 @@ class FeatureInjector:
 
         alpha = next((alpha for min_range, max_range, alpha in self.inject_range_alpha if min_range <= curr_iter <= max_range), None)
         if alpha:
-
             anchor_outputs = anchors_cache.h_out_cache[place_in_unet][curr_iter]
-
             old_output = output#.clone()
             for i in range(bsz):
-                other_outputs = []
-
                 if self.swap_strategy == 'min':
                     min_dists = nn_distances[i].argmin(dim=0)
                     curr_nn_map = nn_map[i][min_dists, torch.arange(vector_dim)]
@@ -165,7 +211,6 @@ class FeatureInjector:
                     final_mask_tgt = attn_masks[i] & dist_mask
 
                     other_outputs = anchor_outputs[min_dists, curr_nn_map][final_mask_tgt]
-
                     output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
 
         return output
@@ -177,7 +222,6 @@ class AnchorCache:
         self.h_out_cache = {} # place_in_unet, iter, h_out
         self.anchors_last_mask = None
         self.dift_cache = None
-
         self.mode = None # mode can be 'cache' or 'inject'
 
     def set_mode(self, mode):
@@ -195,32 +239,25 @@ class AnchorCache:
     def is_cache_mode(self):
         return self.mode == 'cache'
 
-
     def to_device(self, device):
         for key, value in self.input_h_cache.items():
             self.input_h_cache[key] = {k: v.to(device) for k, v in value.items()}
-
         for key, value in self.h_out_cache.items():
             self.h_out_cache[key] = {k: v.to(device) for k, v in value.items()}
-
         if self.anchors_last_mask:
             self.anchors_last_mask = {k: v.to(device) for k, v in self.anchors_last_mask.items()}
-
         if self.dift_cache is not None:
             self.dift_cache = self.dift_cache.to(device)
 
 
 class QueryStore:
     def __init__(self, mode='store', t_range=[0, 1000], strength_start=1, strength_end=1):
-        """
-        Initialize an empty ActivationsStore
-        """
         self.query_store = defaultdict(list)
         self.mode = mode
         self.t_range = t_range
         self.strengthes = np.linspace(strength_start, strength_end, (t_range[1] - t_range[0])+1)
 
-    def set_mode(self, mode): # mode can be 'cache' or 'inject'
+    def set_mode(self, mode): 
         self.mode = mode
 
     def cache_query(self, query, place_in_unet: str):
@@ -233,7 +270,6 @@ class QueryStore:
             new_query = strength * self.query_store[place_in_unet] + (1 - strength) * query
         else:
             new_query = query
-
         return new_query
 
 class DIFTLatentStore:
@@ -248,10 +284,8 @@ class DIFTLatentStore:
 
     def copy(self):
         copy_dift = DIFTLatentStore(self.steps, self.up_ft_indices)
-
         for key, value in self.dift_features.items():
             copy_dift.dift_features[key] = value.clone()
-
         return copy_dift
 
     def reset(self):
