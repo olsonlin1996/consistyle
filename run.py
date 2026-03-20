@@ -442,6 +442,7 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
                             share_queries=share_queries,
                             query_store_kwargs=query_store_kwargs,
                             feature_injector=feature_injector,
+                            use_consistory_feature_injection=True,
                             anchors_cache=anchor_cache_second_stage,
                             num_inference_steps=n_steps)
         img_all = view_images([np.array(x) for x in out.images], display_image=False, downscale_rate=downscale_rate)
@@ -547,6 +548,7 @@ def run_extra_generation(story_pipeline, prompts, concept_token,
                             share_queries=share_queries,
                             query_store_kwargs=query_store_kwargs,
                             feature_injector=feature_injector,
+                            use_consistory_feature_injection=True,
                             anchors_cache=anchor_cache_second_stage,
                             num_inference_steps=n_steps)
         img_all = view_images([np.array(x) for x in out.images], display_image=False, downscale_rate=downscale_rate)
