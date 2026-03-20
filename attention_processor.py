@@ -403,6 +403,10 @@ class ConsistoryExtendedAttnXFormersAttnProcessor:
         # dropout
         hidden_states = attn.to_out[1](hidden_states)
 
+        # Global Debug: Monitor injection status
+        if self.attnstore.curr_iter == 5:
+            print(f"DEBUG: Processor check - injector: {feature_injector is not None}, cons_flag: {use_consistory_feature_injection}, styled_flag: {use_styled_feature_injection}")
+
         if (feature_injector is not None) and use_consistory_feature_injection:
             output_res = int(hidden_states.shape[1] ** 0.5)
 
