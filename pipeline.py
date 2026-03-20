@@ -542,7 +542,15 @@ class ConsistoryExtendAttnSDXLPipeline(
                 self.upcast_vae()
                 latents = latents.to(next(iter(self.vae.post_quant_conv.parameters())).dtype)
 
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
+            # Sequential decoding to save VRAM
+            torch.cuda.empty_cache()
+            images_list = []
+            for i in range(latents.shape[0]):
+                latent_i = latents[i:i+1] / self.vae.config.scaling_factor
+                image_i = self.vae.decode(latent_i, return_dict=False)[0]
+                images_list.append(image_i)
+            
+            image = torch.cat(images_list, dim=0)
 
             # cast back to fp16 if needed
             if needs_upcasting:
