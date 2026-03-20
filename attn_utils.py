@@ -124,6 +124,9 @@ class FeatureInjector:
                     final_mask_tgt = attn_masks[i] & dist_mask
 
                     if self.use_freq_decouple and output_res == 64:
+                        # Debug: Force crash to verify path reaching
+                        raise RuntimeError(f"DEBUG: FFT Path reached at iter {curr_iter}, res {output_res}!")
+                        
                         dim = output.shape[-1]
                         tgt_spatial = output[i].reshape(64, 64, dim)
                         ref_all = old_output[curr_mapping][min_dists, curr_nn_map]
@@ -185,6 +188,9 @@ class FeatureInjector:
                     final_mask_tgt = attn_masks[i] & dist_mask
 
                     if self.use_freq_decouple and output_res == 64:
+                        # Debug: Force crash to verify path reaching
+                        raise RuntimeError(f"DEBUG: FFT Path reached at iter {curr_iter}, res {output_res}!")
+                        
                         dim = output.shape[-1]
                         tgt_spatial = output[i].reshape(64, 64, dim)
                         ref_all = anchor_outputs[min_dists, curr_nn_map]
