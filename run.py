@@ -32,6 +32,7 @@ def load_pipeline(gpu_id=0, float_type=torch.float16):
         sd_id, unet=unet, torch_dtype=float_type, variant="fp16", use_safetensors=True, scheduler=scheduler
     ).to(device)
     story_pipeline.enable_freeu(s1=0.6, s2=0.4, b1=1.1, b2=1.2)
+    story_pipeline.vae.enable_tiling()
     
     return story_pipeline
 
