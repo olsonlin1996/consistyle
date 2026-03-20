@@ -64,7 +64,7 @@ class FeatureInjector:
         self.swap_strategy = swap_strategy 
         self.dist_thr = dist_thr
         self.inject_unet_parts = inject_unet_parts
-        self.inject_res = [64]
+        self.inject_res = [32, 64]
         self.background_adain = background_adain
         self.background_self_alignment_range = background_self_alignment_range
         self.freq_threshold = freq_threshold
@@ -123,18 +123,15 @@ class FeatureInjector:
                     dist_mask = curr_nn_distances < dist_thr
                     final_mask_tgt = attn_masks[i] & dist_mask
 
-                    # Debug output to terminal
-                    if curr_iter % 5 == 0:
-                        print(f"DEBUG: Checking layer - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
-
                     if self.use_freq_decouple and output_res in [32, 64]:
-                        # Debug: Force crash to verify path reaching
-                        raise RuntimeError(f"DEBUG: FFT Path reached at iter {curr_iter}, res {output_res}!")
+                        if curr_iter % 10 == 0:
+                            print(f"FFT ACTIVE (Outputs) - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
                         
                         dim = output.shape[-1]
-                        tgt_spatial = output[i].reshape(64, 64, dim)
+                        res = output_res
+                        tgt_spatial = output[i].reshape(res, res, dim)
                         ref_all = old_output[curr_mapping][min_dists, curr_nn_map]
-                        ref_spatial = ref_all.reshape(64, 64, dim)
+                        ref_spatial = ref_all.reshape(res, res, dim)
                         
                         tgt_low = get_fft_filter(tgt_spatial, self.freq_threshold, mode='lowpass')
                         tgt_high = get_fft_filter(tgt_spatial, self.freq_threshold, mode='highpass')
@@ -158,7 +155,7 @@ class FeatureInjector:
         bsz = output.shape[0]
         if not (curr_iter  >= self.background_self_alignment_range[0] and curr_iter <= self.background_self_alignment_range[1]):
             return output
-        if output_res != 64:
+        if output_res not in self.inject_res:
             return output
         attn_masks = self.attn_masks[output_res]
         for i in range(bsz):
@@ -181,7 +178,6 @@ class FeatureInjector:
         alpha = next((alpha for min_range, max_range, alpha in self.inject_range_alpha if min_range <= curr_iter <= max_range), None)
         if alpha:
             anchor_outputs = anchors_cache.h_out_cache[place_in_unet][curr_iter]
-            old_output = output
             for i in range(bsz):
                 if self.swap_strategy == 'min':
                     min_dists = nn_distances[i].argmin(dim=0)
@@ -191,18 +187,15 @@ class FeatureInjector:
                     dist_mask = curr_nn_distances < dist_thr
                     final_mask_tgt = attn_masks[i] & dist_mask
 
-                    # Debug output to terminal
-                    if curr_iter % 5 == 0:
-                        print(f"DEBUG: Checking layer - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
-
                     if self.use_freq_decouple and output_res in [32, 64]:
-                        # Debug: Force crash to verify path reaching
-                        raise RuntimeError(f"DEBUG: FFT Path reached at iter {curr_iter}, res {output_res}!")
+                        if curr_iter % 10 == 0:
+                            print(f"FFT ACTIVE (Anchors) - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
                         
                         dim = output.shape[-1]
-                        tgt_spatial = output[i].reshape(64, 64, dim)
+                        res = output_res
+                        tgt_spatial = output[i].reshape(res, res, dim)
                         ref_all = anchor_outputs[min_dists, curr_nn_map]
-                        ref_spatial = ref_all.reshape(64, 64, dim)
+                        ref_spatial = ref_all.reshape(res, res, dim)
                         
                         tgt_low = get_fft_filter(tgt_spatial, self.freq_threshold, mode='lowpass')
                         tgt_high = get_fft_filter(tgt_spatial, self.freq_threshold, mode='highpass')
@@ -213,7 +206,7 @@ class FeatureInjector:
                         output[i][final_mask_tgt] = combined_spatial.reshape(-1, dim)[final_mask_tgt]
                     else:
                         other_outputs = anchor_outputs[min_dists, curr_nn_map][final_mask_tgt]
-                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*output[i][final_mask_tgt]
 
         return output
 
