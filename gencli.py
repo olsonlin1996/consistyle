@@ -54,6 +54,8 @@ def run_batch(
     perform_adain_ablation: bool = False,
     perform_no_dift_ablation: bool = False,
     background_adain_mode: str = "none",  # none | pre-subject | pre-subject-background | post
+    freq_threshold: float = 8.0,
+    use_freq_decouple: bool = True,
 ):
     if concept_token is None:
         concept_token = ["dog"]
@@ -94,6 +96,8 @@ def run_batch(
         perform_ablations=perform_ablations,
         perform_adain_ablation=perform_adain_ablation,
         perform_no_dift_ablation=perform_no_dift_ablation,
+        freq_threshold=freq_threshold,
+        use_freq_decouple=use_freq_decouple,
     )
 
     if out_dir is not None:
@@ -116,6 +120,8 @@ def run_cached_anchors(
     settings=None,
     cache_cpu_offloading: bool = False,
     out_dir: str | None = None,
+    freq_threshold: float = 8.0,
+    use_freq_decouple: bool = True,
 ):
     if concept_token is None:
         concept_token = ["dog"]
@@ -154,6 +160,8 @@ def run_cached_anchors(
             mask_dropout=mask_dropout,
             same_latent=same_latent,
             cache_cpu_offloading=cache_cpu_offloading,
+            freq_threshold=freq_threshold,
+            use_freq_decouple=use_freq_decouple,
         )
         if out_dir is not None:
             extra_out_images[0].save(f"{out_dir}/extra_image_{i}.png")
@@ -211,6 +219,8 @@ if __name__ == "__main__":
     parser.add_argument("--perform_no_dift_ablation", default=False, type=str2bool, required=False)
 
     parser.add_argument("--out_dir", default=None, type=str, required=False)
+    parser.add_argument("--freq_threshold", default=8.0, type=float, required=False)
+    parser.add_argument("--use_freq_decouple", default=True, type=str2bool, required=False)
     parser.add_argument(
         "--background_adain_mode",
         default="none",
@@ -260,6 +270,8 @@ if __name__ == "__main__":
             perform_adain_ablation=args.perform_adain_ablation,
             perform_no_dift_ablation=args.perform_no_dift_ablation,
             background_adain_mode=args.background_adain_mode,
+            freq_threshold=args.freq_threshold,
+            use_freq_decouple=args.use_freq_decouple,
         )
     elif args.run_type == "cached":
         run_cached_anchors(
@@ -275,6 +287,8 @@ if __name__ == "__main__":
             settings=args.settings,
             cache_cpu_offloading=args.cache_cpu_offloading,
             out_dir=args.out_dir,
+            freq_threshold=args.freq_threshold,
+            use_freq_decouple=args.use_freq_decouple,
         )
     else:
         print("Invalid run type")
