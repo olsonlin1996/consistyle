@@ -393,7 +393,8 @@ class ConsistoryExtendedAttnXFormersAttnProcessor:
                 hidden_states = torch.bmm(attention_probs, value)
 
         hidden_states = hidden_states.to(query.dtype)
-        hidden_states = attn.batch_to_head_dim(hidden_states)
+        if len(hidden_states.shape) == 3:
+            hidden_states = attn.batch_to_head_dim(hidden_states)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states, *args)
