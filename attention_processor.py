@@ -303,31 +303,34 @@ class ConsistoryExtendedAttnXFormersAttnProcessor:
                 subjects_hidden_states = torch.stack([x[self.attnstore.last_mask_dropout[width]] for x in hidden_states.chunk(2)])
                 anchors_cache.input_h_cache[self.place_in_unet][self.attnstore.curr_iter] = subjects_hidden_states
 
+            # Check if we should perform injection (with safety check for cache existence)
+            do_injection = False
             if anchors_cache and anchors_cache.is_inject_mode():
+                if self.place_in_unet in anchors_cache.input_h_cache and \
+                   self.attnstore.curr_iter in anchors_cache.input_h_cache[self.place_in_unet]:
+                    do_injection = True
+
+            if do_injection:
                 # We make extended key and value by concatenating the original key and value with the query.
-                if self.place_in_unet in anchors_cache.input_h_cache and self.attnstore.curr_iter in anchors_cache.input_h_cache[self.place_in_unet]:
-                    anchors_hidden_states = anchors_cache.input_h_cache[self.place_in_unet][self.attnstore.curr_iter]
+                anchors_hidden_states = anchors_cache.input_h_cache[self.place_in_unet][self.attnstore.curr_iter]
 
-                    anchors_keys = attn.to_k(anchors_hidden_states, *args)
-                    anchors_values = attn.to_v(anchors_hidden_states, *args)
+                anchors_keys = attn.to_k(anchors_hidden_states, *args)
+                anchors_values = attn.to_v(anchors_hidden_states, *args)
 
-                    extended_key = torch.cat([torch.cat([key.chunk(2, dim=0)[x], anchors_keys[x].unsqueeze(0)], dim=1) for x in range(2)])
-                    extended_value = torch.cat([torch.cat([value.chunk(2, dim=0)[x], anchors_values[x].unsqueeze(0)], dim=1) for x in range(2)])
+                extended_key = torch.cat([torch.cat([key.chunk(2, dim=0)[x], anchors_keys[x].unsqueeze(0)], dim=1) for x in range(2)])
+                extended_value = torch.cat([torch.cat([value.chunk(2, dim=0)[x], anchors_values[x].unsqueeze(0)], dim=1) for x in range(2)])
 
-                    extended_key = attn.head_to_batch_dim(extended_key).contiguous()
-                    extended_value = attn.head_to_batch_dim(extended_value).contiguous()
+                extended_key = attn.head_to_batch_dim(extended_key).contiguous()
+                extended_value = attn.head_to_batch_dim(extended_value).contiguous()
 
-                    # attn_masks needs to be of shape [batch_size, query_tokens, key_tokens]
-                    if hidden_states.dtype == torch.float16:
-                        hidden_states = xformers.ops.memory_efficient_attention(
-                            query, extended_key, extended_value,  op=self.attention_op, scale=attn.scale
-                        )
-                    else:
-                        attention_probs = attn.get_attention_scores(query, extended_key, attention_mask)
-                        hidden_states = torch.bmm(attention_probs, extended_value)
+                # attn_masks needs to be of shape [batch_size, query_tokens, key_tokens]
+                if hidden_states.dtype == torch.float16:
+                    hidden_states = xformers.ops.memory_efficient_attention(
+                        query, extended_key, extended_value,  op=self.attention_op, scale=attn.scale
+                    )
                 else:
-                    # Fallback if cache is missing for this iter/part
-                    pass
+                    attention_probs = attn.get_attention_scores(query, extended_key, attention_mask)
+                    hidden_states = torch.bmm(attention_probs, extended_value)
             else:
                 # # We make extended key and value by concatenating the original key and value with the query.
                 # attention_mask_bias = self.attnstore.get_attn_mask_bias(tgt_size = width, bsz = batch_size)
@@ -369,15 +372,15 @@ class ConsistoryExtendedAttnXFormersAttnProcessor:
                     curr_v = attn.head_to_batch_dim(curr_v).contiguous()
 
                     if hidden_states.dtype == torch.float16:
-                        hidden_states = xformers.ops.memory_efficient_attention(
+                        hidden_states_out = xformers.ops.memory_efficient_attention(
                             curr_q, curr_k, curr_v, 
                             op=self.attention_op, scale=attn.scale
                         )
                     else:
                         attention_probs = attn.get_attention_scores(curr_q, curr_k)
-                        hidden_states = torch.bmm(attention_probs, curr_v)
+                        hidden_states_out = torch.bmm(attention_probs, curr_v)
                         
-                    ex_out[start_idx:end_idx] = hidden_states
+                    ex_out[start_idx:end_idx] = hidden_states_out
                 hidden_states = ex_out
         else:
             key = attn.head_to_batch_dim(key).contiguous()
@@ -393,8 +396,7 @@ class ConsistoryExtendedAttnXFormersAttnProcessor:
                 hidden_states = torch.bmm(attention_probs, value)
 
         hidden_states = hidden_states.to(query.dtype)
-        if len(hidden_states.shape) == 3:
-            hidden_states = attn.batch_to_head_dim(hidden_states)
+        hidden_states = attn.batch_to_head_dim(hidden_states)
 
         # linear proj
         hidden_states = attn.to_out[0](hidden_states, *args)
