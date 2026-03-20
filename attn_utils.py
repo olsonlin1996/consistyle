@@ -177,36 +177,40 @@ class FeatureInjector:
 
         alpha = next((alpha for min_range, max_range, alpha in self.inject_range_alpha if min_range <= curr_iter <= max_range), None)
         if alpha:
-            anchor_outputs = anchors_cache.h_out_cache[place_in_unet][curr_iter]
-            for i in range(bsz):
-                if self.swap_strategy == 'min':
-                    min_dists = nn_distances[i].argmin(dim=0)
-                    curr_nn_map = nn_map[i][min_dists, torch.arange(vector_dim)]
-                    curr_nn_distances = nn_distances[i][min_dists, torch.arange(vector_dim)]
-                    dist_thr = get_dynamic_threshold(curr_nn_distances) if self.dist_thr == 'dynamic' else self.dist_thr
-                    dist_mask = curr_nn_distances < dist_thr
-                    final_mask_tgt = attn_masks[i] & dist_mask
+            if place_in_unet in anchors_cache.h_out_cache and curr_iter in anchors_cache.h_out_cache[place_in_unet]:
+                anchor_outputs = anchors_cache.h_out_cache[place_in_unet][curr_iter]
+                for i in range(bsz):
+                    if self.swap_strategy == 'min':
+                        min_dists = nn_distances[i].argmin(dim=0)
+                        curr_nn_map = nn_map[i][min_dists, torch.arange(vector_dim)]
+                        curr_nn_distances = nn_distances[i][min_dists, torch.arange(vector_dim)]
+                        dist_thr = get_dynamic_threshold(curr_nn_distances) if self.dist_thr == 'dynamic' else self.dist_thr
+                        dist_mask = curr_nn_distances < dist_thr
+                        final_mask_tgt = attn_masks[i] & dist_mask
 
-                    if self.use_freq_decouple and output_res in [32, 64]:
-                        if curr_iter % 10 == 0:
-                            print(f"FFT ACTIVE (Anchors) - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
-                        
-                        dim = output.shape[-1]
-                        res = output_res
-                        tgt_spatial = output[i].reshape(res, res, dim)
-                        ref_all = anchor_outputs[min_dists, curr_nn_map]
-                        ref_spatial = ref_all.reshape(res, res, dim)
-                        
-                        tgt_low = get_fft_filter(tgt_spatial, self.freq_threshold, mode='lowpass')
-                        tgt_high = get_fft_filter(tgt_spatial, self.freq_threshold, mode='highpass')
-                        ref_high = get_fft_filter(ref_spatial, self.freq_threshold, mode='highpass')
-                        
-                        ref_high_styled = adain_style(ref_high, tgt_high)
-                        combined_spatial = tgt_low + (alpha * ref_high_styled + (1 - alpha) * tgt_high)
-                        output[i][final_mask_tgt] = combined_spatial.reshape(-1, dim)[final_mask_tgt]
-                    else:
-                        other_outputs = anchor_outputs[min_dists, curr_nn_map][final_mask_tgt]
-                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*output[i][final_mask_tgt]
+                        if self.use_freq_decouple and output_res in [32, 64]:
+                            if curr_iter % 10 == 0:
+                                print(f"FFT ACTIVE (Anchors) - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
+                            
+                            dim = output.shape[-1]
+                            res = output_res
+                            tgt_spatial = output[i].reshape(res, res, dim)
+                            ref_all = anchor_outputs[min_dists, curr_nn_map]
+                            ref_spatial = ref_all.reshape(res, res, dim)
+                            
+                            tgt_low = get_fft_filter(tgt_spatial, self.freq_threshold, mode='lowpass')
+                            tgt_high = get_fft_filter(tgt_spatial, self.freq_threshold, mode='highpass')
+                            ref_high = get_fft_filter(ref_spatial, self.freq_threshold, mode='highpass')
+                            
+                            ref_high_styled = adain_style(ref_high, tgt_high)
+                            combined_spatial = tgt_low + (alpha * ref_high_styled + (1 - alpha) * tgt_high)
+                            output[i][final_mask_tgt] = combined_spatial.reshape(-1, dim)[final_mask_tgt]
+                        else:
+                            other_outputs = anchor_outputs[min_dists, curr_nn_map][final_mask_tgt]
+                            output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*output[i][final_mask_tgt]
+            else:
+                # Fallback if cache is missing for this iter/part
+                pass
 
         return output
 

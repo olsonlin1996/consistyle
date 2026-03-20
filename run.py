@@ -394,7 +394,10 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
     latents, g = create_latents(story_pipeline, seed, batch_size, same_latent, device, float_type)
 
     anchor_cache_first_stage = AnchorCache()
+    anchor_cache_first_stage.set_mode_cache() # Enable caching for first stage
+    
     anchor_cache_second_stage = AnchorCache()
+    anchor_cache_second_stage.set_mode_cache() # Enable caching for second stage
 
     # ------------------ #
     # Extended attention First Run #
