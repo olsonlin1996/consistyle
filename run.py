@@ -174,8 +174,7 @@ def run_batch_generation(story_pipeline, prompts, concept_token,
                         attnstore=attnstore)
     last_masks = story_pipeline.attention_store.last_mask
 
-    dift_key = list(unet.latent_store.dift_features.keys())[0]
-    dift_features = unet.latent_store.dift_features[dift_key][batch_size:]
+    dift_features = unet.latent_store.dift_features['261_0'][batch_size:]
     dift_features = torch.stack([gaussian_smooth(x, kernel_size=3, sigma=1) for x in dift_features], dim=0)
 
     nn_map, nn_distances = cyclic_nn_map(dift_features, last_masks, LATENT_RESOLUTIONS, device)
@@ -405,8 +404,7 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
                         num_inference_steps=n_steps)
     last_masks = story_pipeline.attention_store.last_mask
 
-    dift_key = list(unet.latent_store.dift_features.keys())[0]
-    dift_features = unet.latent_store.dift_features[dift_key][batch_size:]
+    dift_features = unet.latent_store.dift_features['261_0'][batch_size:]
     dift_features = torch.stack([gaussian_smooth(x, kernel_size=3, sigma=1) for x in dift_features], dim=0)
 
     anchor_cache_first_stage.dift_cache = dift_features
@@ -505,8 +503,7 @@ def run_extra_generation(story_pipeline, prompts, concept_token,
                         num_inference_steps=n_steps)
     last_masks = story_pipeline.attention_store.last_mask
 
-    dift_key = list(unet.latent_store.dift_features.keys())[0]
-    dift_features = unet.latent_store.dift_features[dift_key][batch_size:]
+    dift_features = unet.latent_store.dift_features['261_0'][batch_size:]
     dift_features = torch.stack([gaussian_smooth(x, kernel_size=3, sigma=1) for x in dift_features], dim=0)
 
     anchor_dift_features = anchor_cache_first_stage.dift_cache
