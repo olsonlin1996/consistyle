@@ -123,7 +123,11 @@ class FeatureInjector:
                     dist_mask = curr_nn_distances < dist_thr
                     final_mask_tgt = attn_masks[i] & dist_mask
 
-                    if self.use_freq_decouple and output_res == 64:
+                    # Debug output to terminal
+                    if curr_iter % 5 == 0:
+                        print(f"DEBUG: Checking layer - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
+
+                    if self.use_freq_decouple and output_res in [32, 64]:
                         # Debug: Force crash to verify path reaching
                         raise RuntimeError(f"DEBUG: FFT Path reached at iter {curr_iter}, res {output_res}!")
                         
@@ -187,7 +191,11 @@ class FeatureInjector:
                     dist_mask = curr_nn_distances < dist_thr
                     final_mask_tgt = attn_masks[i] & dist_mask
 
-                    if self.use_freq_decouple and output_res == 64:
+                    # Debug output to terminal
+                    if curr_iter % 5 == 0:
+                        print(f"DEBUG: Checking layer - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
+
+                    if self.use_freq_decouple and output_res in [32, 64]:
                         # Debug: Force crash to verify path reaching
                         raise RuntimeError(f"DEBUG: FFT Path reached at iter {curr_iter}, res {output_res}!")
                         
