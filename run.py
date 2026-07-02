@@ -25,7 +25,7 @@ def load_pipeline(gpu_id=0, float_type=torch.float16):
     
     device = torch.device(f'cuda:{gpu_id}') if torch.cuda.is_available() else torch.device('cpu')
     # device = torch.device('cpu')
-    unet = ConsistorySDXLUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet", torch_dtype=float_type)
+    unet = ConsistorySDXLUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet", torch_dtype=float_type, variant="fp16", use_safetensors=True)
     scheduler = DDIMScheduler.from_pretrained(sd_id, subfolder="scheduler")
 
     story_pipeline = ConsistoryExtendAttnSDXLPipeline.from_pretrained(
@@ -33,7 +33,7 @@ def load_pipeline(gpu_id=0, float_type=torch.float16):
     ).to(device)
     story_pipeline.enable_freeu(s1=0.6, s2=0.4, b1=1.1, b2=1.2)
     story_pipeline.vae.enable_tiling()
-    
+
     return story_pipeline
 
 def create_anchor_mapping(bsz, anchor_indices=[0]):
@@ -408,8 +408,15 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
     else:
         extended_attn_kwargs = {**default_extended_attn_kwargs, 't_range': []}
 
+    # Pre-compute once; passing feature_injector to the second call triggers a
+    # device mismatch inside encode_prompt under PyTorch 2.11 + SDXL fp16.
+    prompt_embeds, neg_prompt_embeds, pooled_embeds, neg_pooled_embeds = story_pipeline.encode_prompt(
+        prompt=prompts, device=device, num_images_per_prompt=1, do_classifier_free_guidance=True)
+
     print(extended_attn_kwargs['t_range'])
-    out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
+    out = story_pipeline(generator=g, latents=latents,
+                        prompt_embeds=prompt_embeds, negative_prompt_embeds=neg_prompt_embeds,
+                        pooled_prompt_embeds=pooled_embeds, negative_pooled_prompt_embeds=neg_pooled_embeds,
                         attention_store_kwargs=default_attention_store_kwargs,
                         extended_attn_kwargs=extended_attn_kwargs,
                         share_queries=share_queries,
@@ -434,13 +441,15 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
 
     # ------------------ #
     # Extended attention with nn_map #
-    
+
     if perform_injection:
-        feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
+        feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)],
                                         swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic',
                                         freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
 
-        out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
+        out = story_pipeline(generator=g, latents=latents,
+                            prompt_embeds=prompt_embeds, negative_prompt_embeds=neg_prompt_embeds,
+                            pooled_prompt_embeds=pooled_embeds, negative_pooled_prompt_embeds=neg_pooled_embeds,
                             attention_store_kwargs=default_attention_store_kwargs,
                             extended_attn_kwargs=extended_attn_kwargs,
                             share_queries=share_queries,
