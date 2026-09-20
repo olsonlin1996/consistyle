@@ -19,7 +19,6 @@
 from diffusers.utils import USE_PEFT_BACKEND
 from typing import Callable, Optional
 import torch
-import numpy as np
 from diffusers.models.attention_processor import Attention
 
 from adain import adain_style
@@ -27,7 +26,6 @@ from attn_utils import AnchorCache, FeatureInjector, QueryStore, xformers
 from utils.ptp_utils import AttentionStore
 import matplotlib.pyplot as plt
 import torch
-import torch.fft as fft
 from PIL import Image
 # import torchvision.transforms as T
 
@@ -97,62 +95,6 @@ class ConsistoryExtendedAttnXFormersAttnProcessor:
         self.values_cache = None
 
 
-    def fft_compose(self, query, radius_ratio=0.1):
-        batch, tokens, channels = query.shape
-        # channels are num_heads*head_dim
-        H, W = int(np.sqrt(tokens)), int(np.sqrt(tokens))
-        q_copy = query.clone()
-        q_copy = q_copy.view(batch, H, W, channels).permute(0, 3, 1, 2) # permute to (B, C, H, W)
-
-        # Apply FFT
-        frequencies = fft.fft2(q_copy)
-        fft_shifted = fft.fftshift(frequencies)
-
-        # Create circular mask
-        center = H // 2
-        Y, X = torch.meshgrid(torch.arange(H), torch.arange(W), indexing='ij')
-        dist = torch.sqrt((X - center) ** 2 + (Y - center) ** 2)
-        radius = radius_ratio * center
-        mask = (dist <= radius).float()
-        mask = mask.view(1, 1, H, W).expand(batch, channels, H, W)
-        mask = mask.to(query.device)
-        # Apply low/high masks
-        low_fft = fft_shifted * mask
-        high_fft = fft_shifted * (1 - mask)
-
-        return low_fft, high_fft
-    
-    def inverse_fft_compose(self, query, high_query1_fft, radius_ratio=0.1):
-
-        batch, tokens, channels = query.shape
-        # channels are num_heads*head_dim
-        H, W = int(np.sqrt(tokens)), int(np.sqrt(tokens))
-        q_copy = query.clone()
-        q_copy = q_copy.view(batch, H, W, channels).permute(0, 3, 1, 2) # permute to (B, C, H, W)
-
-        # Apply FFT
-        frequencies = fft.fft2(q_copy)
-        fft_shifted = fft.fftshift(frequencies)
-
-        # Create circular mask
-        center = H // 2
-        Y, X = torch.meshgrid(torch.arange(H), torch.arange(W), indexing='ij')
-        dist = torch.sqrt((X - center) ** 2 + (Y - center) ** 2)
-        radius = radius_ratio * center
-        mask = (dist <= radius).float()
-        mask = mask.view(1, 1, H, W).expand(batch, channels, H, W)
-        mask = mask.to(query.device)
-        # Apply low/high masks
-        low_fft = fft_shifted * mask
-        # high_fft = fft_shifted * (1 - mask)
-    
-        combined_fft = low_fft + high_query1_fft
-        # Inverse FFT
-        combined_fft_unshifted = fft.ifftshift(combined_fft)
-        combined_query = fft.ifft2(combined_fft_unshifted).real
-        combined_query = combined_query.permute(0,2,3,1).view(batch, H * W, channels) # permute back to (B, H*W, C)
-        combined_query = combined_query.type(query.dtype)
-        return combined_query
 
     def __call__(
         self,
@@ -258,14 +200,12 @@ class ConsistoryExtendedAttnXFormersAttnProcessor:
 
 
                 # other_queries = self.attnstore.get_query(self.place_in_unet).to(value.device)
-                # _ , other_query_high_freq = self.fft_compose(query)
 
                 if attn_qk_range[0]  <= self.attnstore.curr_iter <= attn_qk_range[1]: # key, query first pass, value sdxl vanila
                     nn_map = feature_injector.get_nn_map(i % (batch_size //2), width, self.attnstore.extended_mapping)
                     curr_mapping, min_dists, curr_nn_map, final_mask_tgt = nn_map
 
                     # key = self.attnstore.get_key(self.place_in_unet).to(value.device)
-                    # _ , other_query_high_freq = self.fft_compose(query)
 
                     if use_consistyle_direct_injection:
                         other_query = query[0]
@@ -288,7 +228,6 @@ class ConsistoryExtendedAttnXFormersAttnProcessor:
                 #     other_value = value[batch_size//2:][curr_mapping][min_dists, curr_nn_map][final_mask_tgt]
                 #     value[i][final_mask_tgt] *= 0
 
-                    # query = self.inverse_fft_compose(query, other_query_high_freq)
                 # blneding_factor = 0.5
                     
         query = attn.head_to_batch_dim(query).contiguous()

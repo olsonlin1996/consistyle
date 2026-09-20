@@ -107,9 +107,7 @@ def run_batch_generation(story_pipeline, prompts, concept_token,
                         attn_qk_range=[5,15],
                         perform_ablations=False,
                         perform_adain_ablation=False,
-                        perform_no_dift_ablation=False,
-                        freq_threshold=8.0,
-                        use_freq_decouple=True):
+                        perform_no_dift_ablation=False):
     
     device = story_pipeline.device
     tokenizer = story_pipeline.tokenizer
@@ -192,8 +190,7 @@ def run_batch_generation(story_pipeline, prompts, concept_token,
     
     if perform_consistory_injection:
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
-                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2),
-                                        freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
+                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2))
 
         out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
                             attention_store_kwargs=default_attention_store_kwargs,
@@ -213,8 +210,7 @@ def run_batch_generation(story_pipeline, prompts, concept_token,
     
     if perform_styled_injection:
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
-                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2),
-                                        freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
+                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2))
 
         out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
                             attention_store_kwargs=default_attention_store_kwargs,
@@ -241,8 +237,7 @@ def run_batch_generation(story_pipeline, prompts, concept_token,
         
     if perform_ablations:
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
-                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2),
-                                        freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
+                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2))
 
         out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
                             attention_store_kwargs=default_attention_store_kwargs,
@@ -265,8 +260,7 @@ def run_batch_generation(story_pipeline, prompts, concept_token,
         gc.collect()
         
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
-                                swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2),
-                                freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
+                                swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2))
 
         out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
                             attention_store_kwargs=default_attention_store_kwargs,
@@ -288,8 +282,7 @@ def run_batch_generation(story_pipeline, prompts, concept_token,
         gc.collect()
         
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
-                                swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2),
-                                freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
+                                swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2))
 
         out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
                             attention_store_kwargs=default_attention_store_kwargs,
@@ -312,8 +305,7 @@ def run_batch_generation(story_pipeline, prompts, concept_token,
         
     if perform_adain_ablation:
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
-                                swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2),
-                                freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
+                                swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2))
 
         out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
                             attention_store_kwargs=default_attention_store_kwargs,
@@ -341,8 +333,7 @@ def run_batch_generation(story_pipeline, prompts, concept_token,
         
     if perform_no_dift_ablation:
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
-                                swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2),
-                                freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
+                                swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic', background_adain=background_adain, background_self_alignment_range=(n_steps//3 + 1, n_steps//3 + 2))
 
         out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
                             attention_store_kwargs=default_attention_store_kwargs,
@@ -373,8 +364,7 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
                         seed=40, n_steps=50, mask_dropout=0.5,
                         same_latent=False, share_queries=True,
                         perform_sdsa=True, perform_injection=True,
-                        downscale_rate=4, cache_cpu_offloading=False,
-                        freq_threshold=8.0, use_freq_decouple=True):
+                        downscale_rate=4, cache_cpu_offloading=False):
     device = story_pipeline.device
     tokenizer = story_pipeline.tokenizer
     float_type = story_pipeline.dtype
@@ -413,6 +403,17 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
     prompt_embeds, neg_prompt_embeds, pooled_embeds, neg_pooled_embeds = story_pipeline.encode_prompt(
         prompt=prompts, device=device, num_images_per_prompt=1, do_classifier_free_guidance=True)
 
+    # Offload text encoders to CPU to free ~3.5 GiB VRAM.
+    # Setting pipeline refs to None so _execution_device falls back to UNet (CUDA),
+    # preventing pipeline from placing timestep tensors on CPU and causing device mismatch.
+    _te1 = story_pipeline.text_encoder
+    _te2 = story_pipeline.text_encoder_2
+    _te1.to('cpu')
+    _te2.to('cpu')
+    story_pipeline.text_encoder = None
+    story_pipeline.text_encoder_2 = None
+    torch.cuda.empty_cache()
+
     print(extended_attn_kwargs['t_range'])
     out = story_pipeline(generator=g, latents=latents,
                         prompt_embeds=prompt_embeds, negative_prompt_embeds=neg_prompt_embeds,
@@ -427,6 +428,7 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
 
     dift_features = unet.latent_store.dift_features['261_0'][batch_size:]
     dift_features = torch.stack([gaussian_smooth(x, kernel_size=3, sigma=1) for x in dift_features], dim=0)
+    unet.latent_store.reset()  # free raw DIFT tensor from GPU
 
     anchor_cache_first_stage.dift_cache = dift_features
     anchor_cache_first_stage.anchors_last_mask = last_masks
@@ -435,6 +437,9 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
         anchor_cache_first_stage.to_device(torch.device('cpu'))
 
     nn_map, nn_distances = cyclic_nn_map(dift_features, last_masks, LATENT_RESOLUTIONS, device)
+    # 這裡 del 只釋放本地參照；同一份 tensor 仍由 anchor_cache_first_stage 持有（L443），
+    # 供 second stage 於 L477 取用。本地參照留著會讓它多佔一份顯存直到函式結束。
+    del dift_features
 
     torch.cuda.empty_cache()
     gc.collect()
@@ -444,8 +449,7 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
 
     if perform_injection:
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)],
-                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic',
-                                        freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
+                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic')
 
         out = story_pipeline(generator=g, latents=latents,
                             prompt_embeds=prompt_embeds, negative_prompt_embeds=neg_prompt_embeds,
@@ -461,7 +465,9 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
         img_all = view_images([np.array(x) for x in out.images], display_image=False, downscale_rate=downscale_rate)
         # display_attn_maps(story_pipeline.attention_store.last_mask, out.images)
 
-        anchor_cache_second_stage.dift_cache = dift_features
+        # 取 first stage 持有的同一份 dift_cache，而非已被 del 的本地變數（原為 UnboundLocalError）。
+        # 不改回保留本地參照，是因為本機 16GB 顯存吃緊，多一份 GPU 參照會提高 OOM 風險。
+        anchor_cache_second_stage.dift_cache = anchor_cache_first_stage.dift_cache
         anchor_cache_second_stage.anchors_last_mask = last_masks
 
         if cache_cpu_offloading:
@@ -479,8 +485,7 @@ def run_extra_generation(story_pipeline, prompts, concept_token,
                          seed=40, n_steps=50, mask_dropout=0.5,
                          same_latent=False, share_queries=True,
                          perform_sdsa=True, perform_injection=True,
-                         downscale_rate=4, cache_cpu_offloading=False,
-                         freq_threshold=8.0, use_freq_decouple=True):
+                         downscale_rate=4, cache_cpu_offloading=False):
     device = story_pipeline.device
     tokenizer = story_pipeline.tokenizer
     float_type = story_pipeline.dtype
@@ -552,8 +557,7 @@ def run_extra_generation(story_pipeline, prompts, concept_token,
             anchor_cache_second_stage.to_device(device)
 
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
-                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic',
-                                        freq_threshold=freq_threshold, use_freq_decouple=use_freq_decouple)
+                                        swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic')
 
         out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
                             attention_store_kwargs=default_attention_store_kwargs,

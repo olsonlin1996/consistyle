@@ -5,7 +5,6 @@
 
 import numpy as np
 import torch
-import torch.fft
 from collections import defaultdict
 from diffusers.utils.import_utils import is_xformers_available
 from typing import Optional, List
@@ -19,32 +18,6 @@ if is_xformers_available():
 else:
     xformers = None
 
-def get_fft_filter(x, threshold, mode='lowpass'):
-    # x shape: (H, W, C)
-    h, w, c = x.shape
-    
-    # FFT (2D on spatial dimensions)
-    x_freq = torch.fft.fftn(x, dim=(0, 1))
-    x_freq = torch.fft.fftshift(x_freq, dim=(0, 1))
-    
-    # Create circular mask
-    Y, X = torch.meshgrid(torch.arange(h), torch.arange(w), indexing='ij')
-    center_y, center_x = h // 2, w // 2
-    dist = torch.sqrt((X - center_x)**2 + (Y - center_y)**2).to(x.device)
-    
-    if mode == 'lowpass':
-        mask = (dist <= threshold).unsqueeze(-1)
-    else:
-        mask = (dist > threshold).unsqueeze(-1)
-        
-    # Apply mask
-    x_freq = x_freq * mask
-    
-    # Inverse FFT
-    x_freq = torch.fft.ifftshift(x_freq, dim=(0, 1))
-    filtered_x = torch.fft.ifftn(x_freq, dim=(0, 1)).real
-    return filtered_x
-
 class FeatureInjector:
     def __init__(self, nn_map, nn_distances, attn_masks, 
                  inject_range_alpha=[(10,20,0.8)], 
@@ -52,9 +25,7 @@ class FeatureInjector:
                  dist_thr='dynamic', 
                  inject_unet_parts=['up'], 
                  background_adain=None, 
-                 background_self_alignment_range=(15, 20),
-                 freq_threshold=8.0,
-                 use_freq_decouple=True):
+                 background_self_alignment_range=(15, 20)):
         
         self.nn_map = nn_map
         self.nn_distances = nn_distances
@@ -64,11 +35,9 @@ class FeatureInjector:
         self.swap_strategy = swap_strategy 
         self.dist_thr = dist_thr
         self.inject_unet_parts = inject_unet_parts
-        self.inject_res = [32, 64]
+        self.inject_res = [64]
         self.background_adain = background_adain
         self.background_self_alignment_range = background_self_alignment_range
-        self.freq_threshold = freq_threshold
-        self.use_freq_decouple = use_freq_decouple
         
     def get_nn_map(self, i, output_res, extended_mapping):
         if output_res not in self.inject_res:
@@ -123,26 +92,9 @@ class FeatureInjector:
                     dist_mask = curr_nn_distances < dist_thr
                     final_mask_tgt = attn_masks[i] & dist_mask
 
-                    if self.use_freq_decouple and output_res in [32, 64]:
-                        if curr_iter % 10 == 0:
-                            print(f"FFT ACTIVE (Outputs) - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
-                        
-                        dim = output.shape[-1]
-                        res = output_res
-                        tgt_spatial = output[i].reshape(res, res, dim)
-                        ref_all = old_output[curr_mapping][min_dists, curr_nn_map]
-                        ref_spatial = ref_all.reshape(res, res, dim)
-                        
-                        tgt_low = get_fft_filter(tgt_spatial, self.freq_threshold, mode='lowpass')
-                        tgt_high = get_fft_filter(tgt_spatial, self.freq_threshold, mode='highpass')
-                        ref_high = get_fft_filter(ref_spatial, self.freq_threshold, mode='highpass')
-                        
-                        ref_high_styled = adain_style(ref_high, tgt_high)
-                        combined_spatial = tgt_low + (alpha * ref_high_styled + (1 - alpha) * tgt_high)
-                        output[i][final_mask_tgt] = combined_spatial.reshape(-1, dim)[final_mask_tgt]
-                    else:
-                        other_outputs = old_output[curr_mapping][min_dists, curr_nn_map][final_mask_tgt]
-                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                    other_outputs = old_output[curr_mapping][min_dists, curr_nn_map][final_mask_tgt]
+
+                    output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
 
             if anchors_cache and anchors_cache.is_cache_mode():
                 if place_in_unet not in anchors_cache.h_out_cache:
@@ -188,26 +140,8 @@ class FeatureInjector:
                         dist_mask = curr_nn_distances < dist_thr
                         final_mask_tgt = attn_masks[i] & dist_mask
 
-                        if self.use_freq_decouple and output_res in [32, 64]:
-                            if curr_iter % 10 == 0:
-                                print(f"FFT ACTIVE (Anchors) - iter: {curr_iter}, res: {output_res}, alpha: {alpha}")
-                            
-                            dim = output.shape[-1]
-                            res = output_res
-                            tgt_spatial = output[i].reshape(res, res, dim)
-                            ref_all = anchor_outputs[min_dists, curr_nn_map]
-                            ref_spatial = ref_all.reshape(res, res, dim)
-                            
-                            tgt_low = get_fft_filter(tgt_spatial, self.freq_threshold, mode='lowpass')
-                            tgt_high = get_fft_filter(tgt_spatial, self.freq_threshold, mode='highpass')
-                            ref_high = get_fft_filter(ref_spatial, self.freq_threshold, mode='highpass')
-                            
-                            ref_high_styled = adain_style(ref_high, tgt_high)
-                            combined_spatial = tgt_low + (alpha * ref_high_styled + (1 - alpha) * tgt_high)
-                            output[i][final_mask_tgt] = combined_spatial.reshape(-1, dim)[final_mask_tgt]
-                        else:
-                            other_outputs = anchor_outputs[min_dists, curr_nn_map][final_mask_tgt]
-                            output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*output[i][final_mask_tgt]
+                        other_outputs = anchor_outputs[min_dists, curr_nn_map][final_mask_tgt]
+                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*output[i][final_mask_tgt]
             else:
                 # Fallback if cache is missing for this iter/part
                 pass
