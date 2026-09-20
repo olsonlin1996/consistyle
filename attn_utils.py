@@ -94,7 +94,20 @@ class FeatureInjector:
 
                     other_outputs = old_output[curr_mapping][min_dists, curr_nn_map][final_mask_tgt]
 
-                    output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                    if self.background_adain is None:
+                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                    elif self.background_adain == 'pre-subject':
+                        other_outputs = adain_style(other_outputs, old_output[i][final_mask_tgt])
+                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                    elif self.background_adain == 'pre-subject-background':
+                        other_outputs = adain_style(other_outputs, old_output[i][~final_mask_tgt])
+                        output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                    elif self.background_adain == 'post':
+                        style_reference = old_output[i][~final_mask_tgt]
+                        result = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
+                        output[i][final_mask_tgt] = adain_style(result, style_reference)
+                    else:
+                        raise ValueError(f"Unknown background_adain mode: {self.background_adain}")
 
             if anchors_cache and anchors_cache.is_cache_mode():
                 if place_in_unet not in anchors_cache.h_out_cache:
