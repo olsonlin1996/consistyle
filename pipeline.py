@@ -543,6 +543,10 @@ class ConsistoryExtendAttnSDXLPipeline(
                 latents = latents.to(next(iter(self.vae.post_quant_conv.parameters())).dtype)
 
             # Offload UNet to CPU to free up VRAM for VAE
+            # 先記下原裝置：不可事後用 self.device 取回。DiffusionPipeline.device 走訪
+            # _get_signature_keys 回傳的 set，順序依字串雜湊而定、每次執行不同；若剛好
+            # 先掃到已被搬去 CPU 的 unet，self.device 就會回傳 cpu，UNet 永遠搬不回 GPU。
+            _unet_device = self.unet.device
             self.unet.to("cpu")
             torch.cuda.empty_cache()
             import gc
@@ -558,7 +562,7 @@ class ConsistoryExtendAttnSDXLPipeline(
             image = torch.cat(images_list, dim=0)
 
             # Move UNet back to original device (if needed for further calls)
-            self.unet.to(self.device)
+            self.unet.to(_unet_device)
 
             # cast back to fp16 if needed
             if needs_upcasting:
