@@ -40,12 +40,30 @@ def maybe_offload_text_encoders(story_pipeline, device):
     if total_gib >= TEXT_ENCODER_OFFLOAD_VRAM_GIB:
         return False
 
+    # 保留參照供 restore_text_encoders() 還原；後續階段若需即時編碼會用到。
+    story_pipeline._offloaded_text_encoders = (
+        story_pipeline.text_encoder, story_pipeline.text_encoder_2)
     story_pipeline.text_encoder.to('cpu')
     story_pipeline.text_encoder_2.to('cpu')
     story_pipeline.text_encoder = None
     story_pipeline.text_encoder_2 = None
     torch.cuda.empty_cache()
     print(f"[mem] text encoder 已搬至 CPU（GPU 僅 {total_gib:.1f} GiB）")
+    return True
+
+
+def restore_text_encoders(story_pipeline, device):
+    """把先前搬離的 text encoder 放回 pipeline。
+
+    text_encoder 被設為 None 後會留在 pipeline 物件上，任何以 prompt=... 呼叫
+    pipeline 的階段都會因 'NoneType' object is not callable 而失敗。需要即時
+    編碼的階段必須先呼叫本函式，編完再呼叫 maybe_offload_text_encoders()。
+    """
+    saved = getattr(story_pipeline, '_offloaded_text_encoders', None)
+    if saved is None:
+        return False
+    story_pipeline.text_encoder, story_pipeline.text_encoder_2 = (m.to(device) for m in saved)
+    story_pipeline._offloaded_text_encoders = None
     return True
 
 
@@ -545,8 +563,17 @@ def run_extra_generation(story_pipeline, prompts, concept_token,
     else:
         extended_attn_kwargs = {**default_extended_attn_kwargs, 't_range': []}
 
+    # text encoder 可能已被搬離（低顯存機器）：先還原、算好 embeds、再搬離，
+    # 讓本函式後續兩次 pipeline 呼叫都不必依賴 text encoder。
+    restore_text_encoders(story_pipeline, device)
+    prompt_embeds, neg_prompt_embeds, pooled_embeds, neg_pooled_embeds = story_pipeline.encode_prompt(
+        prompt=prompts, device=device, num_images_per_prompt=1, do_classifier_free_guidance=True)
+    maybe_offload_text_encoders(story_pipeline, device)
+
     print(extended_attn_kwargs['t_range'])
-    out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
+    out = story_pipeline(generator=g, latents=latents,
+                        prompt_embeds=prompt_embeds, negative_prompt_embeds=neg_prompt_embeds,
+                        pooled_prompt_embeds=pooled_embeds, negative_pooled_prompt_embeds=neg_pooled_embeds,
                         attention_store_kwargs=default_attention_store_kwargs,
                         extended_attn_kwargs=extended_attn_kwargs,
                         share_queries=share_queries,
@@ -581,7 +608,9 @@ def run_extra_generation(story_pipeline, prompts, concept_token,
         feature_injector = FeatureInjector(nn_map, nn_distances, last_masks, inject_range_alpha=[(n_steps//10, n_steps//3,0.8)], 
                                         swap_strategy='min', inject_unet_parts=['up', 'down'], dist_thr='dynamic')
 
-        out = story_pipeline(prompt=prompts, generator=g, latents=latents, 
+        out = story_pipeline(generator=g, latents=latents,
+                            prompt_embeds=prompt_embeds, negative_prompt_embeds=neg_prompt_embeds,
+                            pooled_prompt_embeds=pooled_embeds, negative_pooled_prompt_embeds=neg_pooled_embeds,
                             attention_store_kwargs=default_attention_store_kwargs,
                             extended_attn_kwargs=extended_attn_kwargs,
                             share_queries=share_queries,
