@@ -251,7 +251,9 @@ class ConsistoryExtendedAttnXFormersAttnProcessor:
 
             if do_injection:
                 # We make extended key and value by concatenating the original key and value with the query.
-                anchors_hidden_states = anchors_cache.input_h_cache[self.place_in_unet][self.attnstore.curr_iter]
+                # 開啟 cache_cpu_offloading 時快取留在 CPU，需搬回當前計算裝置再使用，
+                # 否則 attention 會拿到 CPU 張量（xformers 只支援 CUDA）。
+                anchors_hidden_states = anchors_cache.input_h_cache[self.place_in_unet][self.attnstore.curr_iter].to(hidden_states.device)
 
                 anchors_keys = attn.to_k(anchors_hidden_states, *args)
                 anchors_values = attn.to_v(anchors_hidden_states, *args)

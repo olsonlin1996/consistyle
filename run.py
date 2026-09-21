@@ -537,8 +537,9 @@ def run_extra_generation(story_pipeline, prompts, concept_token,
     dift_features = unet.latent_store.dift_features['261_0'][batch_size:]
     dift_features = torch.stack([gaussian_smooth(x, kernel_size=3, sigma=1) for x in dift_features], dim=0)
 
-    anchor_dift_features = anchor_cache_first_stage.dift_cache
-    anchor_last_masks = anchor_cache_first_stage.anchors_last_mask
+    # offloading 時快取在 CPU，用前搬回計算裝置（anchor_nn_map 需與 dift_features 同裝置）。
+    anchor_dift_features = anchor_cache_first_stage.dift_cache.to(device)
+    anchor_last_masks = {k: v.to(device) for k, v in anchor_cache_first_stage.anchors_last_mask.items()}
 
     nn_map, nn_distances = anchor_nn_map(dift_features, anchor_dift_features, last_masks, anchor_last_masks, LATENT_RESOLUTIONS, device)
 

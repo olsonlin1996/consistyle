@@ -143,7 +143,8 @@ class FeatureInjector:
         alpha = next((alpha for min_range, max_range, alpha in self.inject_range_alpha if min_range <= curr_iter <= max_range), None)
         if alpha:
             if place_in_unet in anchors_cache.h_out_cache and curr_iter in anchors_cache.h_out_cache[place_in_unet]:
-                anchor_outputs = anchors_cache.h_out_cache[place_in_unet][curr_iter]
+                # 同上：offloading 時快取在 CPU，用前搬回 output 所在裝置。
+                anchor_outputs = anchors_cache.h_out_cache[place_in_unet][curr_iter].to(output.device)
                 for i in range(bsz):
                     if self.swap_strategy == 'min':
                         min_dists = nn_distances[i].argmin(dim=0)
