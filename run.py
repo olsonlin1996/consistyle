@@ -19,6 +19,36 @@ from utils.ptp_utils import AttentionStore, view_images
 
 LATENT_RESOLUTIONS = [32, 64]
 
+# 顯存低於此值才把 text encoder 搬到 CPU（省約 3.5 GiB）。
+# 5060 Ti 16GB 需要、4090 24GB 不需要 —— 讓同一份檔案兩台機器通用。
+TEXT_ENCODER_OFFLOAD_VRAM_GIB = 20.0
+
+
+def maybe_offload_text_encoders(story_pipeline, device):
+    """顯存吃緊時把 text encoder 搬離 GPU。
+
+    呼叫前 prompt_embeds 必須已預先算好，因為本函式會把 pipeline 的
+    text_encoder 參照設為 None（同時讓 _execution_device 退回 UNet）。
+
+    回傳 True 表示有搬移。未達門檻則不動作 —— 顯存充足時多一次 CPU 往返
+    只是徒增風險，且舊版 torch（< 2.2）不支援 CPU 上的 fp16 matmul。
+    """
+    if device.type != 'cuda':
+        return False
+
+    total_gib = torch.cuda.get_device_properties(device).total_memory / (1024 ** 3)
+    if total_gib >= TEXT_ENCODER_OFFLOAD_VRAM_GIB:
+        return False
+
+    story_pipeline.text_encoder.to('cpu')
+    story_pipeline.text_encoder_2.to('cpu')
+    story_pipeline.text_encoder = None
+    story_pipeline.text_encoder_2 = None
+    torch.cuda.empty_cache()
+    print(f"[mem] text encoder 已搬至 CPU（GPU 僅 {total_gib:.1f} GiB）")
+    return True
+
+
 def load_pipeline(gpu_id=0, float_type=torch.float16):
     
     sd_id = "stabilityai/stable-diffusion-xl-base-1.0"
@@ -403,16 +433,7 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
     prompt_embeds, neg_prompt_embeds, pooled_embeds, neg_pooled_embeds = story_pipeline.encode_prompt(
         prompt=prompts, device=device, num_images_per_prompt=1, do_classifier_free_guidance=True)
 
-    # Offload text encoders to CPU to free ~3.5 GiB VRAM.
-    # Setting pipeline refs to None so _execution_device falls back to UNet (CUDA),
-    # preventing pipeline from placing timestep tensors on CPU and causing device mismatch.
-    _te1 = story_pipeline.text_encoder
-    _te2 = story_pipeline.text_encoder_2
-    _te1.to('cpu')
-    _te2.to('cpu')
-    story_pipeline.text_encoder = None
-    story_pipeline.text_encoder_2 = None
-    torch.cuda.empty_cache()
+    maybe_offload_text_encoders(story_pipeline, device)
 
     print(extended_attn_kwargs['t_range'])
     out = story_pipeline(generator=g, latents=latents,
