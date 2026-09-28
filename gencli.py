@@ -278,3 +278,20 @@ if __name__ == "__main__":
         )
     else:
         print("Invalid run type")
+
+    # 診斷：印出特徵注入統計（PROBE_INJECT=1 時才有數字）
+    if os.environ.get('PROBE_INJECT'):
+        from attn_utils import FeatureInjector as _FI
+        s = _FI.probe_stats
+        print("\n[probe_inject] " + "=" * 52)
+        if s['calls'] == 0:
+            print("[probe_inject] 注入從未被呼叫 —— inject_outputs 未執行")
+        else:
+            print(f"[probe_inject] 呼叫次數        : {s['calls']}")
+            print(f"[probe_inject] 遮罩內像素(累計) : {s['mask_true']:,}")
+            print(f"[probe_inject] 距離門檻通過     : {s['dist_pass']:,}")
+            print(f"[probe_inject] 實際注入像素     : {s['injected']:,}")
+            print(f"[probe_inject] 佔全部像素比例   : {s['injected']/max(s['total_px'],1):.2%}")
+            print(f"[probe_inject] 佔遮罩內比例     : {s['injected']/max(s['mask_true'],1):.2%}")
+            print(f"[probe_inject] 平均 alpha       : {s['alpha_sum']/s['calls']:.3f}")
+        print("[probe_inject] " + "=" * 52)

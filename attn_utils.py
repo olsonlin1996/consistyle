@@ -3,6 +3,7 @@
 # This work is licensed under the LICENSE file
 # located at the root directory.
 
+import os
 import numpy as np
 import torch
 from collections import defaultdict
@@ -19,6 +20,10 @@ else:
     xformers = None
 
 class FeatureInjector:
+    # 診斷用累計器（PROBE_INJECT=1 時才寫入），供確認特徵注入是否真的發生
+    probe_stats = {'calls': 0, 'injected': 0, 'mask_true': 0,
+                   'dist_pass': 0, 'total_px': 0, 'alpha_sum': 0.0}
+
     def __init__(self, nn_map, nn_distances, attn_masks, 
                  inject_range_alpha=[(10,20,0.8)], 
                  swap_strategy='min', 
@@ -93,6 +98,15 @@ class FeatureInjector:
                     final_mask_tgt = attn_masks[i] & dist_mask
 
                     other_outputs = old_output[curr_mapping][min_dists, curr_nn_map][final_mask_tgt]
+
+                    # 診斷計數（預設關閉，設 PROBE_INJECT=1 才累計）。只統計，不改運算。
+                    if os.environ.get('PROBE_INJECT'):
+                        FeatureInjector.probe_stats['calls'] += 1
+                        FeatureInjector.probe_stats['injected'] += int(final_mask_tgt.sum())
+                        FeatureInjector.probe_stats['mask_true'] += int(attn_masks[i].sum())
+                        FeatureInjector.probe_stats['dist_pass'] += int(dist_mask.sum())
+                        FeatureInjector.probe_stats['total_px'] += int(final_mask_tgt.numel())
+                        FeatureInjector.probe_stats['alpha_sum'] += float(alpha)
 
                     if self.background_adain is None:
                         output[i][final_mask_tgt] = alpha * other_outputs + (1 - alpha)*old_output[i][final_mask_tgt]
