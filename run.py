@@ -465,6 +465,18 @@ def run_anchor_generation(story_pipeline, prompts, concept_token,
                         num_inference_steps=n_steps)
     last_masks = story_pipeline.attention_store.last_mask
 
+    # 診斷用 dump（預設關閉，設 DUMP_MASKS=<目錄> 才啟用）。只存檔，不改任何運算。
+    _dump_dir = os.environ.get('DUMP_MASKS')
+    if _dump_dir:
+        os.makedirs(_dump_dir, exist_ok=True)
+        torch.save({
+            'last_mask': {r: m.cpu() for r, m in last_masks.items() if m is not None},
+            'last_attn_raw': {r: a.cpu() for r, a in
+                              story_pipeline.attention_store.last_attn_raw.items() if a is not None},
+            'prompts': prompts,
+        }, os.path.join(_dump_dir, 'anchor_masks.pt'))
+        print(f"[probe] anchor 遮罩已存至 {_dump_dir}/anchor_masks.pt")
+
     dift_features = unet.latent_store.dift_features['261_0'][batch_size:]
     dift_features = torch.stack([gaussian_smooth(x, kernel_size=3, sigma=1) for x in dift_features], dim=0)
     unet.latent_store.reset()  # free raw DIFT tensor from GPU

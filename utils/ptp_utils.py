@@ -128,6 +128,8 @@ class AttentionStore:
         self.attn_masks = {res: None for res in self.ALL_RES}
         self.last_mask = {res: None for res in self.ALL_RES}
         self.last_mask_dropout = {res: None for res in self.ALL_RES}
+        # 診斷用：二值化前的原始注意力圖，供判別「注意力本身散」vs「Otsu 閾值切壞」
+        self.last_attn_raw = {res: None for res in self.ALL_RES}
         self.values = {}
         self.queries = {}
         self.keys = {}
@@ -162,6 +164,8 @@ class AttentionStore:
         self.attn_masks = {res: None for res in self.ALL_RES}
         self.last_mask = {res: None for res in self.ALL_RES}
         self.last_mask_dropout = {res: None for res in self.ALL_RES}
+        # 診斷用：二值化前的原始注意力圖，供判別「注意力本身散」vs「Otsu 閾值切壞」
+        self.last_attn_raw = {res: None for res in self.ALL_RES}
 
         torch.cuda.empty_cache()
 
@@ -199,6 +203,7 @@ class AttentionStore:
 
             attn_masks = torch.stack(attn_masks)
             self.last_mask[tgt_size] = attn_masks.clone()
+            self.last_attn_raw[tgt_size] = torch.stack(tgt_agg_attn_maps).detach().clone()
 
             # Add mask dropout
             if self.curr_iter < 1000:
