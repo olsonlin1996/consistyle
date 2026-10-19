@@ -32,7 +32,7 @@ from diffusers.utils.torch_utils import randn_tensor
 SD_ID = "stabilityai/stable-diffusion-xl-base-1.0"
 OUT = os.environ.get(
     "ADHERENCE_OUT",
-    "/home/olson/ai_workspace/academic_research/projects/consistyle/results/D1_5_adherence",
+    os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "results"), "D1_5_adherence"),
 )
 SCENE = "in a desert canyon, cinematic photo"
 SEEDS = (0, 1, 2)

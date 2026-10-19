@@ -26,7 +26,7 @@ D14_SCENES = [
     "in a ruined factory, cinematic photo",
     "in a desert canyon, cinematic photo",
 ]
-D14_DIR = "/home/olson/ai_workspace/academic_research/projects/consistyle/results/D1_4_vanilla"
+D14_DIR = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "results"), "D1_4_vanilla")
 
 
 def load_pipe(device):

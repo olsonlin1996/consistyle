@@ -11,7 +11,7 @@ from diffusers import StableDiffusionXLPipeline, DDIMScheduler
 from diffusers.utils.torch_utils import randn_tensor
 
 SD_ID = "stabilityai/stable-diffusion-xl-base-1.0"
-OUT = "/home/olson/ai_workspace/academic_research/projects/consistyle/results/D1_4_vanilla"
+OUT = os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "results"), "D1_4_vanilla")
 SETTINGS = [
     "in a neon city, cinematic photo",
     "in a ruined factory, cinematic photo",

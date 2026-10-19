@@ -17,7 +17,7 @@ from PIL import Image
 
 from subject_mask import SubjectMasker, overlay
 
-R = "/home/olson/ai_workspace/academic_research/projects/consistyle/results"
+R = os.environ.get("CONSISTYLE_RESULTS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "results"))
 OUT = f"{R}/D1_7b_maskeddiff"
 VARIANTS = ["original sdxl", "first pass", "consistory", "consistyle"]
 
